@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Model files (large files)
+*.keras
+*.h5
+*.pkl
+*.pth
+*.pt
+*.ckpt
+
+# Data directories
+data/
+organized_data/
+*.wav
+*.mp3
+*.m4a
+*.flac
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+bash.exe.stackdump
+nul
+
+# Logs and temp files
+*.log
+*.csv
+*.png
+*.jpg
+*.jpeg
+
+# Kaggle
+kaggle.json
+
+# Streamlit
+.streamlit/
+
