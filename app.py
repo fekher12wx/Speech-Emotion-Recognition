@@ -7,6 +7,7 @@ import pickle
 import os
 import tempfile
 from io import BytesIO
+import base64
 
 # Page configuration
 st.set_page_config(
@@ -205,6 +206,36 @@ st.markdown("""
         font-weight: 600;
         margin: 1rem 0;
     }
+    
+    .recording-container {
+        padding: 2rem;
+        border-radius: 15px;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        border: 2px solid #667eea;
+        text-align: center;
+        margin: 2rem 0;
+    }
+    
+    .tab-button {
+        padding: 0.75rem 2rem;
+        border-radius: 10px;
+        background: white;
+        border: 2px solid #667eea;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin: 0.5rem;
+    }
+    
+    .tab-button:hover {
+        background: #667eea;
+        color: white;
+    }
+    
+    .tab-button.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #764ba2;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -294,14 +325,32 @@ def extract_features(file_path, duration=3, offset=0.5):
         st.error(f"Error extracting features: {str(e)}")
         return None
 
+def process_audio_input(audio_input):
+    """Convert audio input to bytes for processing"""
+    try:
+        if isinstance(audio_input, BytesIO):
+            audio_input.seek(0)
+            return audio_input.read()
+        elif isinstance(audio_input, bytes):
+            return audio_input
+        elif isinstance(audio_input, str):
+            # If it's a base64 string (from audio recorder)
+            return base64.b64decode(audio_input)
+        else:
+            return audio_input.getvalue()
+    except Exception as e:
+        st.error(f"Error processing audio input: {str(e)}")
+        return None
+
 def predict_emotion(audio_file, model, scaler, label_encoder):
     """Predict emotion from audio file"""
     try:
+        audio_bytes = process_audio_input(audio_file)
+        if audio_bytes is None:
+            return None, None, None
+            
         with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
-            if isinstance(audio_file, BytesIO):
-                tmp_file.write(audio_file.read())
-            else:
-                tmp_file.write(audio_file.getvalue())
+            tmp_file.write(audio_bytes)
             tmp_path = tmp_file.name
         
         features = extract_features(tmp_path)
@@ -456,29 +505,81 @@ def main():
     # Success Banner
     st.markdown('<div class="success-banner">✅ Model loaded successfully! Ready to analyze emotions.</div>', unsafe_allow_html=True)
     
-    # Upload Section
+    # Input Method Selection
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("### 📁 Upload Audio File")
-        uploaded_file = st.file_uploader(
+        st.markdown("### 🎤 Choose Input Method")
+        
+        # Tabs for upload vs record
+        input_method = st.radio(
             "",
-            type=['wav', 'mp3', 'm4a', 'flac'],
-            help="Upload an audio file to analyze emotions",
+            ["📁 Upload Audio File", "🎙️ Record from Microphone"],
+            horizontal=True,
             label_visibility="collapsed"
         )
+        
+        uploaded_file = None
+        recorded_audio = None
+        
+        if input_method == "📁 Upload Audio File":
+            st.markdown("<br>", unsafe_allow_html=True)
+            uploaded_file = st.file_uploader(
+                "",
+                type=['wav', 'mp3', 'm4a', 'flac'],
+                help="Upload an audio file to analyze emotions",
+                label_visibility="collapsed"
+            )
+        else:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown('<div class="recording-container">', unsafe_allow_html=True)
+            st.markdown("### 🎙️ Record Your Voice")
+            st.markdown("Click the button below to start recording from your microphone")
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Audio recorder
+            try:
+                from audio_recorder_streamlit import audio_recorder
+                
+                recorded_audio = audio_recorder(
+                    text="Click to start recording",
+                    recording_color="#e74c3c",
+                    neutral_color="#667eea",
+                    icon_name="microphone",
+                    icon_size="2x",
+                    pause_threshold=3.0
+                )
+                
+                if recorded_audio:
+                    st.success("✅ Audio recorded successfully! Click 'Predict Emotion' to analyze.")
+                    
+            except ImportError:
+                st.error("❌ Audio recorder package not installed.")
+                st.info("Please install it using:")
+                st.code("pip install audio-recorder-streamlit", language="bash")
+                recorded_audio = None
+            except Exception as e:
+                st.warning(f"⚠️ Recording error: {str(e)}")
+                recorded_audio = None
     
-    if uploaded_file is not None:
+    # Process uploaded or recorded audio
+    audio_to_process = uploaded_file if uploaded_file is not None else recorded_audio
+    
+    if audio_to_process is not None:
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             if show_audio:
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.audio(uploaded_file, format='audio/wav')
+                # Handle both uploaded file and recorded audio
+                if uploaded_file is not None:
+                    st.audio(uploaded_file, format='audio/wav')
+                elif recorded_audio is not None:
+                    st.audio(recorded_audio, format='audio/wav')
                 st.markdown("<br>", unsafe_allow_html=True)
             
             if st.button("🔮 Predict Emotion", type="primary", use_container_width=True):
                 with st.spinner("🔍 Analyzing audio features..."):
-                    emotion, confidence, top_3 = predict_emotion(uploaded_file, model, scaler, label_encoder)
+                    emotion, confidence, top_3 = predict_emotion(audio_to_process, model, scaler, label_encoder)
                 
                 if emotion is not None:
                     st.markdown("<br>", unsafe_allow_html=True)
